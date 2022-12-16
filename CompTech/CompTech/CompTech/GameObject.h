@@ -1,28 +1,32 @@
 #ifndef GAMEOBJECT_H
 #define GAMEOBJECT_H
 #include <SDL.h>
-
-class Arkanoid;
+#include <tuple>
 
 class GameObject
 {
+#define HEIGHT 30
+#define WIDTH 30
+#define SPEED 100
 public:
-	GameObject() = delete;
-	GameObject(Uint8, Uint8, Uint8);
+	GameObject();
+	GameObject(int);
 	virtual GameObject* InitialMove(int, int);
+	virtual GameObject* InitialIndex(int);
 	virtual GameObject* InitialDimensions(int, int);
-	SDL_Rect* GetRect();
-	SDL_Point* GetCentre();
+	void SetDirection(int, int);
+	virtual void Update(float);
 	virtual void Render(SDL_Renderer*);
-	virtual void Update();
 	virtual void Collision(GameObject*);
 
+	virtual int GetIndex();
+	virtual SDL_Rect* GetRect();
+
 protected:
-	Uint8 r;
-	Uint8 g;
-	Uint8 b;
-	SDL_Rect go;
-	SDL_Point centre;
+	int index;
+	SDL_Rect rect;
+	std::tuple<float, float> position;
+	SDL_Point direction;
 };
 
 #endif

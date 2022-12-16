@@ -6,13 +6,18 @@
 #include <algorithm>
 #include <fstream>
 #include <string>
+#include <random>
 #include "GameObject.h"
+#include "EnemyPool.h"
+#include "BulletPool.h"
 
 class Game
 {
-#define WIDTH 800
-#define HEIGHT 600
+#define WINWIDTH 800
+#define WINHEIGHT 600
 #define MOVESPEED 500
+#define SPAWNINTERVAL 500
+#define SPAWNAMOUNT 10
 
 public:
 	void Start();
@@ -27,23 +32,27 @@ private:
 	Game();
 	void CalcFrameRate();
 	void EventHandler();
+	static unsigned int UpdateSpawn(unsigned int, void*);
+	void Spawn();
 	void GameLogic();
+	static bool Compare(SDL_Rect&, SDL_Rect&);
 	void Physics();
 	void Update();
 	void Render();
-	void DeleteObjects();
 
 	Uint64 prevTicks;
 	float deltaTime;
+	inline static bool doSpawn;
 	bool playing;
-	bool left;
-	bool right;
+	int down;
+	int right;
+	std::default_random_engine rng;
+	EnemyPool* enemyPool;
+	BulletPool* bulletPool;
 	SDL_Window* wnd;
 	SDL_Renderer* render;
-	std::vector<std::shared_ptr<GameObject>> renderQueue;
-	std::vector<std::shared_ptr<GameObject>> updateQueue;
-	std::vector<std::shared_ptr<GameObject>> physicsQueue;
-	std::vector<GameObject*> deletionQueue;
+
+	GameObject player;
 };
 
 #endif

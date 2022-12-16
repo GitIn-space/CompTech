@@ -3,17 +3,19 @@
 Game::Game()
 {
 	SDL_Init(SDL_INIT_EVERYTHING);
-	wnd = SDL_CreateWindow("Arkanoid-look-alike", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, 0);
+	wnd = SDL_CreateWindow("Space Shooter", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINWIDTH, WINHEIGHT, 0);
 	render = SDL_CreateRenderer(wnd, -1, SDL_RENDERER_ACCELERATED);
 
 	prevTicks = SDL_GetPerformanceCounter();
 	deltaTime = 0.0f;
+	doSpawn = false;
 	playing = false;
-	left = false;
-	right = false;
+	down = 0;
+	right = 0;
+	enemyPool = &EnemyPool::getInstance();
+	bulletPool = &BulletPool::getInstance();
 
-	renderQueue.emplace_back(std::shared_ptr<GameObject>((new GameObject(232, 0, 254))->InitialMove(0, 0)->InitialDimensions(800, 16)));
-	physicsQueue.emplace_back(renderQueue.back());
+	player = *(GameObject().InitialMove((int) WINWIDTH / 2, (int) WINHEIGHT / 2));
 }
 
 Game& Game::getInstance()
@@ -35,7 +37,7 @@ void Game::EventHandler()
 {
 	SDL_Event event;
 	int scancode;
-	if (SDL_PollEvent(&event))
+	while (SDL_PollEvent(&event))
 	{
 		switch (event.type)
 		{
@@ -51,10 +53,17 @@ void Game::EventHandler()
 				playing = false;
 
 			if (scancode == SDL_SCANCODE_A)
-				left = true;
+				right = -1;
 			if (scancode == SDL_SCANCODE_D)
-				right = true;
+				right = 1;
+			if (scancode == SDL_SCANCODE_W)
+				down = -1;
+			if (scancode == SDL_SCANCODE_S)
+				down = 1;
+			if (scancode == SDL_SCANCODE_B)
+				UpdateSpawn(0, 0);
 
+			player.SetDirection(right, down);
 			break;
 		}
 
@@ -63,19 +72,50 @@ void Game::EventHandler()
 			scancode = event.key.keysym.scancode;
 
 			if (scancode == SDL_SCANCODE_A)
-				left = false;
+				right = 0;
 			if (scancode == SDL_SCANCODE_D)
-				right = false;
+				right = 0;
+			if (scancode == SDL_SCANCODE_W)
+				down = 0;
+			if (scancode == SDL_SCANCODE_S)
+				down = 0;
 
+			player.SetDirection(right, down);
 			break;
 		}
 
 		case SDL_MOUSEBUTTONDOWN:
 		{
-			std::cout << event.button.clicks << std::endl;
+			if (event.button.button == SDL_BUTTON_LEFT)
+			{
+				SDL_Rect* rect = player.GetRect();
+				bulletPool->InitialDirection(bulletPool->InitialMove(bulletPool->Activate(1), rect->x, rect->y), event.button.x - rect->x, event.button.y - rect->y);
+			}
 			break;
 		}
 		}
+	}
+}
+
+unsigned int Game::UpdateSpawn(unsigned int interval, void* param = 0)
+{
+	doSpawn = true;
+
+	return interval;
+}
+
+void Game::Spawn()
+{
+	if (doSpawn)
+	{
+		std::uniform_int_distribution<int> widthDist(0, WINWIDTH);
+		std::uniform_int_distribution<int> heightDist(0, WINHEIGHT);
+
+		int newEnemies = getInstance().enemyPool->Activate(SPAWNAMOUNT);
+		for (unsigned int c = 0; c < SPAWNAMOUNT; c++, newEnemies++)
+			getInstance().enemyPool->InitialMove(newEnemies, widthDist(rng), heightDist(rng));
+
+		doSpawn = false;
 	}
 }
 
@@ -84,17 +124,102 @@ void Game::GameLogic()
 	
 }
 
+bool Game::Compare(SDL_Rect& a, SDL_Rect& b)
+{
+	if (a.x == b.x)
+		return a.y > b.y;
+	return a.x > b.x;
+}
+
 void Game::Physics()
 {
-	for (std::shared_ptr<GameObject> each : physicsQueue)
-		/*/if (SDL_HasIntersection(ball->GetRect(), each->GetRect()))
-			ball->Collision(each.get());*/;
+	std::vector<SDL_Rect>* posEn = enemyPool->Physics();
+	std::vector<SDL_Rect>* posBu = bulletPool->Physics();
+	std::vector<SDL_Rect*> merged;
+	std::vector<int> enemyIndex;
+	std::vector<int> bulletIndex;
+
+	merged.reserve(posEn->size() + posBu->size());
+	bulletIndex.reserve(posBu->size());
+	std::vector<SDL_Rect>::iterator enemy = posEn->begin();
+	std::vector<SDL_Rect>::iterator bullet = posBu->begin();
+	int eActive = enemyPool->getActive();
+	int bActive = bulletPool->getActive();
+
+	while ((enemy != posEn->begin() + eActive) || (bullet != posBu->begin() + bActive))
+	{
+		if (enemy == posEn->begin() + eActive)
+		{
+			merged.push_back(&*bullet);
+			bulletIndex.push_back(merged.size());
+			bullet++;
+		}
+		else if (bullet == posBu->begin() + bActive)
+		{
+			merged.push_back(&*enemy);
+			enemyIndex.push_back(merged.size());
+			enemy++;
+		}
+		else
+		{
+			if (Compare(*enemy, *bullet))
+			{
+				merged.push_back(&*bullet);
+				bulletIndex.push_back(merged.size());
+				bullet++;
+			}
+			else
+			{
+				merged.push_back(&*enemy);
+				enemy++;
+			}
+		}
+	}
+	
+	/*bool comparing = true;
+	bool hypSmaller = true;
+	int offset;
+	std::vector<std::tuple<int, int>> buffer;
+	for (unsigned int c = 0; c < bulletIndex.size(); c++)
+	{
+		offset = -1;
+		while (comparing)
+		{
+			while (bulletIndex[c] + offset > 0 && bulletIndex[c] + offset < merged.size())//(hypSmaller)
+			{
+				hypSmaller = std::hypot((*merged.at(bulletIndex[c] + offset)).x - (*merged.at(bulletIndex[c])).x, (*merged.at(bulletIndex[c] + offset)).y - (*merged.at(bulletIndex[c])).y) < ( int(HEIGHT) * 2);
+				if (offset <= 0)
+				{
+					if (SDL_HasIntersection(merged.at(bulletIndex[c] + offset), merged.at(bulletIndex[c])))
+						buffer.emplace_back(c, bulletIndex[c] + offset - c);
+					offset--;
+				}
+				else
+				{
+					if (SDL_HasIntersection(merged.at(bulletIndex[c] + offset), merged.at(bulletIndex[c])))
+						buffer.emplace_back(c, bulletIndex[c] + offset - c);
+					offset++;
+				}
+			}
+			offset = 1;
+			if(!hypSmaller)
+				comparing = false;
+		}
+	}
+	for (std::tuple<int, int>& each : buffer)
+	{
+		bulletPool->Deactivate(std::get<0>(each));
+		enemyPool->Deactivate(std::get<1>(each));
+	}*/
 }
 
 void Game::Update()
 {
-	for (std::shared_ptr<GameObject> each : updateQueue)
-		each.get()->Update();
+	enemyPool->Update(deltaTime, WINWIDTH, WINHEIGHT);
+
+	player.Update(deltaTime);
+
+	bulletPool->Update(deltaTime, WINWIDTH, WINHEIGHT);
 }
 
 void Game::Render()
@@ -102,8 +227,12 @@ void Game::Render()
 	SDL_SetRenderDrawColor(render, 0, 0, 0, 255);
 	SDL_RenderClear(render);
 
-	for (std::shared_ptr<GameObject> each : renderQueue)
-		each->Render(render);
+	enemyPool->Render(render);
+
+	SDL_SetRenderDrawColor(render, 0, 255, 0, 255);
+	player.Render(render);
+
+	bulletPool->Render(render);
 
 	SDL_RenderPresent(render);
 
@@ -112,68 +241,26 @@ void Game::Render()
 
 void Game::Remove(GameObject* go)
 {
-	deletionQueue.emplace_back(go);
-}
-
-void Game::DeleteObjects()
-{
-	for (GameObject* go : deletionQueue)
-	{
-		for (std::shared_ptr<GameObject>& each : renderQueue)
-			if (each.get() == go)
-			{
-				each = nullptr;
-				renderQueue.erase(std::remove(renderQueue.begin(), renderQueue.end(), each));
-				break;
-			}
-
-		for (std::shared_ptr<GameObject>& each : updateQueue)
-			if (each.get() == go)
-			{
-				each = nullptr;
-				updateQueue.erase(std::remove(updateQueue.begin(), updateQueue.end(), each));
-				break;
-			}
-
-		for (std::shared_ptr<GameObject>& each : physicsQueue)
-			if (each.get() == go)
-			{
-				each = nullptr;
-				physicsQueue.erase(std::remove(physicsQueue.begin(), physicsQueue.end(), each));
-				break;
-			}
-		go = nullptr;
-	}
-
-	deletionQueue.clear();
+	
 }
 
 void Game::Start()
 {
 	playing = true;
+	SDL_AddTimer(SPAWNINTERVAL, &UpdateSpawn, 0);
+	
 	while (playing)
 	{
 		CalcFrameRate();
 		EventHandler();
+		Spawn();
 		GameLogic();
 		Physics();
 		Update();
 		Render();
-		DeleteObjects();
+
+		std::cout << "fps: " << 1 / deltaTime << std::endl;
 	}
-
-	for (std::shared_ptr<GameObject> each : renderQueue)
-		each = nullptr;
-
-	for (std::shared_ptr<GameObject> each : updateQueue)
-		each = nullptr;
-
-	for (std::shared_ptr<GameObject> each : physicsQueue)
-		each = nullptr;
-
-	renderQueue.clear();
-	updateQueue.clear();
-	physicsQueue.clear();
 
 	SDL_DestroyRenderer(render);
 	SDL_DestroyWindow(wnd);

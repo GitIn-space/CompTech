@@ -19,7 +19,7 @@
 # Compiled Dynamic libraries
 *.so
 *.dylib
-*.dll
+#*.dll
 
 # Fortran module files
 *.mod
@@ -29,10 +29,10 @@
 *.lai
 *.la
 *.a
-*.lib
+#*.lib
 
 # Executables
-*.exe
+#*.exe
 *.out
 *.app
 
@@ -82,7 +82,7 @@ $RECYCLE.BIN/
 mono_crash.*
 
 # Build results
-[Dd]ebug/
+[Cc]omp[Tt]ech/[Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
@@ -140,7 +140,7 @@ StyleCopReport.xml
 *.ilk
 *.meta
 *.iobj
-*.pdb
+#*.pdb
 *.ipdb
 *.pgc
 *.pgd
@@ -457,3 +457,4 @@ FodyWeavers.xsd
 # Additional files built by Visual Studio
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,visualstudio,c++
+CompTech/CompTech/Debug/CompTech.pdb
